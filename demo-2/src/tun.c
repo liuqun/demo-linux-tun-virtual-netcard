@@ -57,6 +57,7 @@ PING 192.168.3.12 (192.168.3.12) 56(84) bytes of data.
 #include <linux/if_tun.h>
 #include<stdlib.h>
 #include<stdio.h>
+#include <unistd.h>
 
 int tun_alloc(int flags)
 {
