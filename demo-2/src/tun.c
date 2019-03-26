@@ -58,6 +58,7 @@ PING 192.168.3.12 (192.168.3.12) 56(84) bytes of data.
 #include<stdlib.h>
 #include<stdio.h>
 #include <unistd.h>
+#include <stdlib.h>
 
 int create_tun_interface(int flags)
 {
@@ -85,31 +86,52 @@ int create_tun_interface(int flags)
     return fd;
 }
 
+static struct {
+    int tun_fd;
+} global = {
+    .tun_fd = -1,
+};
+
+static void auto_cleanup_tun_fd()
+{/* Clean up callback function */
+    int fd = global.tun_fd;
+
+    if (fd < 0) {
+        return;
+    }
+    close(fd);
+    fprintf(stderr, "Closed tun_fd=%d before program exit\n", fd);
+}
+
 int main()
 {
 
     int tun_fd, nread;
     char buffer[1500];
+    int i;
 
     /* Flags: IFF_TUN   - TUN device (no Ethernet headers)
      *        IFF_TAP   - TAP device
      *        IFF_NO_PI - Do not provide packet information
      */
     tun_fd = create_tun_interface(IFF_TUN | IFF_NO_PI);
+    printf("Debug: tun_fd=%d\n", tun_fd);
 
     if (tun_fd < 0) {
         exit(1);
+    } else {
+        global.tun_fd = tun_fd;
+        (void) atexit(auto_cleanup_tun_fd);
     }
 
-    while (1) {
+    for (i=0; i<20; i++) {
         nread = read(tun_fd, buffer, sizeof(buffer));
         if (nread < 0) {
-            perror("Reading from interface");
-            close(tun_fd);
+            perror("Failed to read from interface");
             exit(1);
         }
 
-        printf("Read %d bytes from tun/tap device\n", nread);
+        printf("i=%d, nread = %d bytes\n", i, nread);
     }
     return 0;
 }
