@@ -59,7 +59,7 @@ PING 192.168.3.12 (192.168.3.12) 56(84) bytes of data.
 #include<stdio.h>
 #include <unistd.h>
 
-int tun_alloc(int flags)
+int create_tun_interface(int flags)
 {
 
     struct ifreq ifr;
@@ -67,6 +67,7 @@ int tun_alloc(int flags)
     char *clonedev = "/dev/net/tun";
 
     if ((fd = open(clonedev, O_RDWR)) < 0) {
+        perror(clonedev);
         return fd;
     }
 
@@ -74,6 +75,7 @@ int tun_alloc(int flags)
     ifr.ifr_flags = flags;
 
     if ((err = ioctl(fd, TUNSETIFF, (void *) &ifr)) < 0) {
+        perror("Faild to create tunX interface");
         close(fd);
         return err;
     }
@@ -93,10 +95,9 @@ int main()
      *        IFF_TAP   - TAP device
      *        IFF_NO_PI - Do not provide packet information
      */
-    tun_fd = tun_alloc(IFF_TUN | IFF_NO_PI);
+    tun_fd = create_tun_interface(IFF_TUN | IFF_NO_PI);
 
     if (tun_fd < 0) {
-        perror("Allocating interface");
         exit(1);
     }
 
