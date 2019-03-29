@@ -103,6 +103,31 @@ static void auto_cleanup_tun_fd()
     fprintf(stderr, "Closed tun_fd=%d before program exit\n", fd);
 }
 
+#include <errno.h>
+#include <signal.h>
+
+void sigaction_cb_func(int signo, siginfo_t *info, void *context)
+{
+    /* SIGTERM and SIGINT come from different place, print some notice on the screen */
+    switch (signo) {
+        case SIGINT: {
+            fprintf(stderr, "\n[Received keyboard interrupt (Ctrl+C)]\n");
+            break;
+        }
+        case SIGTERM: {
+            fprintf(stderr, "\n[Received signal SIGTERM (from Linux OS)]\n");
+            break;
+        }
+        default: {
+            fprintf(stderr, "\n[Ignoring other un-handled signal number=%d]\n", signo);
+            return;
+        }
+    }
+
+    fprintf(stderr, "Debug: Some cleanups would be done before exiting...\n");
+    exit(0);
+}
+
 int main()
 {
 
@@ -120,6 +145,16 @@ int main()
     if (tun_fd < 0) {
         exit(1);
     } else {
+        struct sigaction action;
+
+        memset(&action, 0, sizeof(struct sigaction));
+        action.sa_flags = SA_SIGINFO;
+        action.sa_sigaction = sigaction_cb_func;
+        sigemptyset(&action.sa_mask);
+        if ((sigaction(SIGINT, &action, NULL) < 0) ||
+            (sigaction(SIGTERM, &action, NULL) < 0) ) {
+            fprintf(stderr, "Debug: Cannot register callback function for SIGTERM / SIGINT.\n");
+        }
         global.tun_fd = tun_fd;
         (void) atexit(auto_cleanup_tun_fd);
     }
@@ -127,7 +162,13 @@ int main()
     for (i=0; i<20; i++) {
         nread = read(tun_fd, buffer, sizeof(buffer));
         if (nread < 0) {
-            perror("Failed to read from interface");
+            int e = errno;
+
+            if (EINTR == e) {
+                // Ignore SIGINT(Ctrl_C) keyboard interrupt.
+                continue;
+            }
+            fprintf(stderr, "Failed to read from interface: %s", strerror(e));
             exit(1);
         }
 
