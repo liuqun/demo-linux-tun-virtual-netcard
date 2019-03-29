@@ -60,7 +60,13 @@ PING 192.168.3.12 (192.168.3.12) 56(84) bytes of data.
 #include <unistd.h>
 #include <stdlib.h>
 
-int create_tun_interface(int flags)
+struct tuntap_option {
+    char tuntap_interface_name[IFNAMSIZ+1];
+    int disable_pktinfo;
+};
+
+#include <ctype.h>
+int create_tun_interface(const struct tuntap_option *opt, char out_interface_name[IFNAMSIZ])
 {
 
     struct ifreq ifr;
@@ -73,7 +79,18 @@ int create_tun_interface(int flags)
     }
 
     memset(&ifr, 0, sizeof(ifr));
-    ifr.ifr_flags = flags;
+    ifr.ifr_flags = IFF_TUN;
+    /* Flags: IFF_TUN   - TUN device (no Ethernet headers)
+     *        IFF_TAP   - TAP device
+     *        IFF_NO_PI - Do not provide packet information
+     */
+    if (opt->disable_pktinfo) {
+        ifr.ifr_flags |= IFF_NO_PI;
+    }
+    if (isalnum(opt->tuntap_interface_name[0])) {
+        ifr.ifr_name[IFNAMSIZ-1] = '\0';
+        memcpy(ifr.ifr_name, opt->tuntap_interface_name, IFNAMSIZ-1);
+    }
 
     if ((err = ioctl(fd, TUNSETIFF, (void *) &ifr)) < 0) {
         perror("Faild to create tunX interface");
@@ -81,7 +98,7 @@ int create_tun_interface(int flags)
         return err;
     }
 
-    printf("Open tun/tap device: %s for reading...\n", ifr.ifr_name);
+    memcpy(out_interface_name, ifr.ifr_name, IFNAMSIZ);
 
     return fd;
 }
@@ -134,12 +151,17 @@ int main()
     int tun_fd, nread;
     char buffer[1500];
     int i;
+    struct tuntap_option opt = {
+        .tuntap_interface_name = "tun0",
+        .disable_pktinfo = 1,
+    };
+    char ifnambuf[IFNAMSIZ+1] = {0};
 
-    /* Flags: IFF_TUN   - TUN device (no Ethernet headers)
-     *        IFF_TAP   - TAP device
-     *        IFF_NO_PI - Do not provide packet information
-     */
-    tun_fd = create_tun_interface(IFF_TUN | IFF_NO_PI);
+    tun_fd = create_tun_interface(&opt, ifnambuf);
+    if (tun_fd >=0 ) {
+        ifnambuf[sizeof(ifnambuf)-1] = '\0';
+        printf("Successfully opened tun/tap device: %s for reading...\n", ifnambuf);
+    }
     printf("Debug: tun_fd=%d\n", tun_fd);
 
     if (tun_fd < 0) {
